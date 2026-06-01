@@ -1,39 +1,32 @@
-# syntax=docker/dockerfile:1.7
+FROM ubuntu:22.04
 
-ARG GO_VERSION=1.23
-ARG DEBIAN_VERSION=bookworm
-ARG NSJAIL_VERSION=3.4
+# Install dependencies (fixed names)
+RUN apt update && apt install -y \
+    git \
+    build-essential \
+    pkg-config \
+    libprotobuf-dev \
+    protobuf-compiler \
+    libnl-3-dev \
+    libnl-route-3-dev \
+    python3 \
+    gcc \
+    curl \
+    ca-certificates
 
-# ---- Build nsjail from source ----
-FROM debian:${DEBIAN_VERSION}-slim AS nsjail-builder
-ARG NSJAIL_VERSION
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        autoconf bison ca-certificates flex g++ gcc git libnl-route-3-dev \
-        libprotobuf-dev libtool make pkg-config protobuf-compiler \
-    && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 --branch ${NSJAIL_VERSION} https://github.com/google/nsjail.git /src/nsjail \
-    && make -C /src/nsjail \
-    && install -m 0755 /src/nsjail/nsjail /usr/local/bin/nsjail
+# Build nsjail from source
+RUN git clone https://github.com/google/nsjail.git /nsjail && \
+    cd /nsjail && \
+    make && \
+    cp nsjail /usr/local/bin
 
-# ---- Builder / dev image (Go + linters + nsjail) ----
-FROM golang:${GO_VERSION}-${DEBIAN_VERSION} AS builder
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        libnl-route-3-200 libprotobuf32 \
-    && rm -rf /var/lib/apt/lists/*
-COPY --from=nsjail-builder /usr/local/bin/nsjail /usr/local/bin/nsjail
-RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-WORKDIR /src
-COPY go.mod ./
-RUN go mod download
+# Install Go
+RUN apt install -y golang
+
+WORKDIR /app
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/goboxd ./cmd/goboxd
 
-# ---- Runtime image ----
-FROM debian:${DEBIAN_VERSION}-slim AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates libnl-route-3-200 libprotobuf32 \
-    && rm -rf /var/lib/apt/lists/*
-COPY --from=nsjail-builder /usr/local/bin/nsjail /usr/local/bin/nsjail
-COPY --from=builder        /out/goboxd          /usr/local/bin/goboxd
+RUN go build -o server ./cmd/goboxd
+
 EXPOSE 8080
-ENTRYPOINT ["/usr/local/bin/goboxd"]
+CMD ["./server"]
