@@ -25,6 +25,7 @@ RUN git clone https://github.com/google/nsjail.git /nsjail && \
 WORKDIR /app
 COPY . .
 
+# Build Go server
 RUN go build -o goboxd ./cmd/goboxd
 
 EXPOSE 8080
