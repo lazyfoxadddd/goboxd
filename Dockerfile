@@ -1,7 +1,7 @@
 FROM ubuntu:22.04
 
-# Install dependencies (fixed names)
-RUN apt update && apt install -y \
+# Install dependencies
+RUN apt-get update && apt-get install -y \
     git \
     build-essential \
     pkg-config \
@@ -12,21 +12,28 @@ RUN apt update && apt install -y \
     python3 \
     gcc \
     curl \
-    ca-certificates
+    ca-certificates \
+    golang \
+    && rm -rf /var/lib/apt/lists/*
 
-# Build nsjail from source
+# Build nsjail
 RUN git clone https://github.com/google/nsjail.git /nsjail && \
     cd /nsjail && \
     make && \
-    cp nsjail /usr/local/bin
+    cp nsjail /usr/local/bin && \
+    chmod +x /usr/local/bin/nsjail
 
-# Install Go
-RUN apt install -y golang
-
+# Set working directory
 WORKDIR /app
+
+# Copy project
 COPY . .
 
-RUN go build -o server ./cmd/goboxd
+# Build Go server
+RUN go build -o goboxd ./cmd/goboxd
 
+# Expose port
 EXPOSE 8080
-CMD ["./server"]
+
+# Start server
+CMD ["./goboxd"]
